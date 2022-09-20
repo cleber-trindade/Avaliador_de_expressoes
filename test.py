@@ -26,7 +26,18 @@ if __name__ == '__main__':
         ("sqrt(9)", 3),
         ("d=2", 2),
         ("b=4 b + 3", 7),
+        ("b=4 (3 + b)", 7),
+        ("b=4 3 + b", 7),
+        ("a = 1 a + 3", 4),
+        ("a = 1 b = 2 a + b + 3", 6),
+        ("a = 2 2 * a * 1", 4),
+        ("a = 2 2 * a", 4),
         ("a = 2 a * 2", 4),
+        ("a = 2 b = 3 a * b", 6),
+        ("a = 2 b = 3 a * b * 2", 12),
+        ("a = 2 10 / a", 5),
+        ("a = 2\nb = 3\nc = a * b * 2\nc + 1", 13),
+        # ("sqrt(9) * 3", 9),
     ]
 
     errors = []
@@ -43,11 +54,11 @@ if __name__ == '__main__':
                     'expected': expected,
                     'result': response
                 })
-        except:
+        except Exception as e:
             errors.append({
                 'expression': expression,
                 'expected': expected,
-                'result': '[THROWS EXCEPTION]'
+                'result': f"[THROWS EXCEPTION]: {str(e)}"
             })
 
     if (len(errors) == 0):
@@ -55,7 +66,7 @@ if __name__ == '__main__':
 
         sys.exit(0)
     else:
-        print("\n\nSome expressions executed with error:")
+        print(f"\n\n{len(errors)} expressions was executed with error:")
 
         for error in errors: 
             print(f"\nexpression: \"{error['expression']}\"")

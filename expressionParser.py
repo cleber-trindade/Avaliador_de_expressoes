@@ -13,7 +13,7 @@
 # P  -> SP'
 # P' -> SP' | &
 # S  -> A | E
-# A  -> id = E | id(E)
+# A  -> id = S | id(S) | E
 # E  -> TE'
 # E' -> +TE' | -TE' | &
 # T  -> FT'
@@ -37,7 +37,7 @@
 # - Implementar um parser recursivo descendente que avalie uma lista de expressões, mostrando o resultado delas, ou erros no caso de expressões mal formadas.
 
 from enumTokenType import *
-from token import *
+from tokens import *
 from lexer import *
 
 # Parse P
@@ -46,26 +46,38 @@ def parse_P(data):
     S = parse_S(data)
     P_prime = parse_P_prime(data)
 
-    return S + (P_prime or 0)
+    # return S + (P_prime or 0)
+
+    if (P_prime):
+        return P_prime
+
+    return S
 
 # Parse P'
 # P' -> SP' | &
 def parse_P_prime(data):
     try:
-        token, operator = next(data)
+        next(data)
     except StopIteration:
         return 0
+
+    data.put_back()
 
     S = parse_S(data)
     P_prime = parse_P_prime(data)
 
-    return S + (P_prime or 0)
+    # return S + (P_prime or 0)
+
+    if (P_prime):
+        return P_prime
+
+    return S
 
 # Parse S
 # S  -> A | E
 def parse_S(data):
     try:
-        tokenType, value = next(data)
+        tokenType, _value, _curr, _prev = next(data)
     except StopIteration:
         raise Exception("Unexpected end of source.") from None
 
@@ -77,10 +89,10 @@ def parse_S(data):
     return parse_E(data)
 
 # Parse A
-# A -> id = E | id(E)
+# A -> id = S | id(S) | E
 def parse_A(data):
     try:
-        token, tokenId = next(data)
+        token, tokenId, _curr, previous = next(data)
     except StopIteration:
         raise Exception("Unexpected end of source.") from None
 
@@ -91,39 +103,42 @@ def parse_A(data):
     tokenFromTable = data.tokens.getToken(tokenId)
 
     try:
-        token, value = next(data)
+        nextToken, _value, _curr, _prev = next(data)
     except StopIteration:
-        raise Exception("Unexpected end of source.") from None
+        nextToken = None
 
     # identifier open parentesis, is a function
-    if token == EnumTokenType.OPEN_PAR:
+    if nextToken == EnumTokenType.OPEN_PAR:
         if (tokenFromTable is None or (tokenFromTable != None and tokenFromTable['type'] != EnumTokenType.FUNCTION)):
             raise Exception("Wrong function") from None
 
         fn = tokenFromTable['value']
-        E = parse_E(data)
+        S = parse_S(data)
 
         try:
-            if next(data) != (EnumTokenType.CLOSE_PAR, ")"):
+            nextTokenClosePar, _value, _curr, _prev = next(data)
+            if nextTokenClosePar != EnumTokenType.CLOSE_PAR:
                 data.error("Unbalanced parenthesis.")
         except StopIteration:
             data.error("Unbalanced parenthesis.")
 
-        return fn(E)
+        return fn(S)
 
     # identifier is assignment, store value on token table
-    if token == EnumTokenType.ASSIGNMENT:
+    if nextToken == EnumTokenType.ASSIGNMENT:
         if (tokenFromTable != None and tokenFromTable['type'] == EnumTokenType.FUNCTION):
             raise Exception("Is not possible overwrite a function") from None
 
-        E = parse_E(data)
-        
+        S = parse_S(data)
+
         # save identifier in token table
-        data.tokens.addToken(tokenId, EnumTokenType.IDENTIFIER, E)
+        data.tokens.addToken(tokenId, EnumTokenType.IDENTIFIER, S)
 
-        return E
+        return S
 
-    raise Exception("Unrecognized operation") from None
+    data.put_back(previous) # returns to token idenfier
+
+    return parse_E(data)
 
 # Parse E
 # E -> TE'
@@ -137,7 +152,7 @@ def parse_E(data):
 # E' -> +TE' | -TE' | &
 def parse_E_prime(data):
     try:
-        token, operator = next(data)
+        token, operator, _curr, _prev = next(data)
     except StopIteration:
         return 0
 
@@ -147,8 +162,8 @@ def parse_E_prime(data):
 
         return (T if operator == "+" else -1 * T) + (E_prime or 0)
 
-    if token not in [EnumTokenType.OPERATOR, EnumTokenType.OPEN_PAR, EnumTokenType.CLOSE_PAR]:
-        data.error(f"Invalid character: {operator}")
+    # if token not in [EnumTokenType.OPERATOR, EnumTokenType.OPEN_PAR, EnumTokenType.CLOSE_PAR, EnumTokenType.IDENTIFIER, EnumTokenType.ASSIGNMENT, EnumTokenType.DELIMITER]:
+        # data.error(f"Invalid character: {operator}")
 
     data.put_back()
 
@@ -166,7 +181,7 @@ def parse_T(data):
 # T' -> *FT' | /FT' | &
 def parse_T_prime(data):
     try:
-        token, operator = next(data)
+        token, operator, _curr, _prev = next(data)
     except StopIteration:
         return 1
 
@@ -176,11 +191,10 @@ def parse_T_prime(data):
 
         return (F if operator == "*" else 1 / F) * T_prime
 
-    if token not in [EnumTokenType.OPERATOR, EnumTokenType.OPEN_PAR, EnumTokenType.CLOSE_PAR, EnumTokenType.IDENTIFIER]:
-        data.error(f"Invalid character: {operator}")
+    # if token not in [EnumTokenType.OPERATOR, EnumTokenType.OPEN_PAR, EnumTokenType.CLOSE_PAR, EnumTokenType.IDENTIFIER, EnumTokenType.ASSIGNMENT, EnumTokenType.DELIMITER]:
+        # data.error(f"Invalid character: {operator}")
 
-    if token != EnumTokenType.IDENTIFIER:
-        data.put_back()
+    data.put_back()
 
     return 1
 
@@ -188,7 +202,7 @@ def parse_T_prime(data):
 # F -> ( E ) | N
 def parse_F(data):
     try:
-        token, value = next(data)
+        token, value, _curr, _prev = next(data)
     except StopIteration:
         raise Exception("Unexpected end of source.") from None
 
@@ -196,7 +210,8 @@ def parse_F(data):
         E = parse_E(data)
 
         try:
-            if next(data) != (EnumTokenType.CLOSE_PAR, ")"):
+            nextTokenClosePar, _value, _curr, _prev = next(data)
+            if nextTokenClosePar != EnumTokenType.CLOSE_PAR:
                 data.error("Unbalanced parenthesis.")
         except StopIteration:
             data.error("Unbalanced parenthesis.")
@@ -217,7 +232,6 @@ def parse_F(data):
 
     raise data.error(f"Unexpected token: {value}.")
 
-
 # -------------------------------------------------------------------------
 
 def parser(source_code):
@@ -225,37 +239,3 @@ def parser(source_code):
     lexer = Lexer(source_code, tokens)
 
     return parse_P(lexer)
-
-
-# if __name__ == "__main__":
-#     expressions = [
-#         ("1 + 1", 1 + 1),
-#         ("2 * 3", 2 * 3),
-#         ("5 / 4", 5 / 4),
-#         ("2 * 3 + 1", 2 * 3 + 1),
-#         ("1 + 2 * 3", 1 + 2 * 3),
-#         ("(2 * 3) + 1", (2 * 3) + 1),
-#         ("2 * (3 + 1)", 2 * (3 + 1)),
-#         ("(2 + 1) * 3", (2 + 1) * 3),
-#         ("-2 + 3", -2 + 3),
-#         ("5 + (-2)", 5 + (-2)),
-#         ("5 * -2", 5 * -2),
-#         ("-1 - -2", -1 - -2),
-#         ("-1 - 2", -1 - 2),
-#         ("4 - 5", 4 - 5),
-#         ("1 - 2", 1 - 2),
-#         ("3 - ((8 + 3) * -2)", 3 - ((8 + 3) * -2)),
-#         ("2.01e2 - 200", 2.01e2 - 200),
-#         ("2*3*4", 2 * 3 * 4),
-#         ("2 + 3 + 4 * 3 * 2 + 2", 2 + 3 + 4 * 3 * 2 + 2),
-#         ("10 + 11", 10 + 11),
-#         ("sqrt(9)", 3),
-#         ("d=2", 2),
-#         ("b=4 b + 3", 7),
-#     ]
-
-#     for expression, expected in expressions:
-#         response = parse(expression)
-#         result = "PASS" if response == expected else "FAIL"
-
-#         print(f"Expression: \"{expression}\" - {result}  => expected: {expected} / response: {response}")

@@ -16,8 +16,11 @@ class Lexer:
         return self
 
     # At most une token can be put back in the stream.
-    def put_back(self):
-        self.current = self.previous
+    def put_back(self, prev = None):
+        if (prev != None):
+            self.current = prev
+        else:
+            self.current = self.previous
 
     def peek(self):
         if self.current < len(self.data):
@@ -38,6 +41,9 @@ class Lexer:
 
             if char == "=":
                 return (EnumTokenType.ASSIGNMENT, char, current)
+
+            if char == ";":
+                return (EnumTokenType.DELIMITER, char, current)
 
             # Do not handle minus operator.
             if char in "+/*^":
@@ -73,7 +79,7 @@ class Lexer:
             self.previous = self.current
             self.current = current
 
-            return (token_id, token_value)
+            return (token_id, token_value, current, self.previous)
 
         raise StopIteration()
 
